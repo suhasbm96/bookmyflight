@@ -29,15 +29,13 @@ public class BookingService {
         Flight flight = flightRepository.findByFlightNumber(request.getFlightNumber())
             .orElseThrow(() -> new FlightNotFoundException(request.getFlightNumber()));
 
-        // Check seat availability and book atomically
-        synchronized (flight) {
-            if (!flight.bookSeats(request.getNumberOfSeats())) {
-                throw new InsufficientSeatsException(
-                    request.getFlightNumber(),
-                    request.getNumberOfSeats(),
-                    flight.getAvailableSeats()
-                );
-            }
+        // Book seats - thread-safe operation handled by ReentrantReadWriteLock in Flight
+        if (!flight.bookSeats(request.getNumberOfSeats())) {
+            throw new InsufficientSeatsException(
+                request.getFlightNumber(),
+                request.getNumberOfSeats(),
+                flight.getAvailableSeats()
+            );
         }
 
         // Create booking
@@ -68,9 +66,8 @@ public class BookingService {
         Flight flight = flightRepository.findByFlightNumber(booking.getFlightNumber())
             .orElseThrow(() -> new FlightNotFoundException(booking.getFlightNumber()));
 
-        synchronized (flight) {
-            flight.cancelSeats(booking.getNumberOfSeats());
-        }
+        // Cancel seats - thread-safe operation handled by ReentrantReadWriteLock in Flight
+        flight.cancelSeats(booking.getNumberOfSeats());
 
         // Update booking status
         booking.setStatus(Booking.BookingStatus.CANCELLED);
@@ -82,4 +79,3 @@ public class BookingService {
             .orElseThrow(() -> new FlightNotFoundException(flightNumber));
     }
 }
-

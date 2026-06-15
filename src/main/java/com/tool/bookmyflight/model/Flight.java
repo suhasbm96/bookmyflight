@@ -1,5 +1,8 @@
 package com.tool.bookmyflight.model;
 
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 public class Flight {
     private String flightNumber;
     private String airline;
@@ -8,6 +11,9 @@ public class Flight {
     private int totalSeats;
     private int availableSeats;
     private double price;
+
+    // ReentrantReadWriteLock for thread-safe read/write operations
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     public Flight(String flightNumber, String airline, String departure, String arrival, int totalSeats, double price) {
         this.flightNumber = flightNumber;
@@ -59,12 +65,34 @@ public class Flight {
         this.totalSeats = totalSeats;
     }
 
+    /**
+     * Gets the available seats using read lock.
+     * Multiple threads can read available seats simultaneously.
+     *
+     * @return number of available seats
+     */
     public int getAvailableSeats() {
-        return availableSeats;
+        lock.readLock().lock();
+        try {
+            return availableSeats;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
+    /**
+     * Sets the available seats using write lock.
+     * Only one thread can modify available seats at a time.
+     *
+     * @param availableSeats number of available seats to set
+     */
     public void setAvailableSeats(int availableSeats) {
-        this.availableSeats = availableSeats;
+        lock.writeLock().lock();
+        try {
+            this.availableSeats = availableSeats;
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public double getPrice() {
@@ -75,19 +103,42 @@ public class Flight {
         this.price = price;
     }
 
-    public synchronized boolean bookSeats(int numSeats) {
-        if (availableSeats >= numSeats) {
-            availableSeats -= numSeats;
-            return true;
+    /**
+     * Atomically books seats if available using write lock.
+     * Only one thread can write (book/cancel) at a time.
+     * Multiple threads can safely read available seats concurrently.
+     *
+     * @param numSeats number of seats to book
+     * @return true if seats were successfully booked, false if insufficient seats
+     */
+    public boolean bookSeats(int numSeats) {
+        lock.writeLock().lock();
+        try {
+            if (availableSeats >= numSeats) {
+                availableSeats -= numSeats;
+                return true;
+            }
+            return false;
+        } finally {
+            lock.writeLock().unlock();
         }
-        return false;
     }
 
-    public synchronized void cancelSeats(int numSeats) {
-        availableSeats += numSeats;
-        if (availableSeats > totalSeats) {
-            availableSeats = totalSeats;
+    /**
+     * Atomically cancels seats and returns them to available pool using write lock.
+     * Only one thread can write (book/cancel) at a time.
+     *
+     * @param numSeats number of seats to cancel
+     */
+    public void cancelSeats(int numSeats) {
+        lock.writeLock().lock();
+        try {
+            availableSeats += numSeats;
+            if (availableSeats > totalSeats) {
+                availableSeats = totalSeats;
+            }
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 }
-
